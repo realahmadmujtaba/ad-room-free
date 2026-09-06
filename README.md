@@ -2,7 +2,7 @@
 
 **Agentic Cinema: The Blockbuster Hackathon — ClickHouse track**
 
-**Live demo:** _[paste your Streamlit Community Cloud URL here]_
+**Live demo:** [adroom.streamlit.app](https://adroom.streamlit.app/)
 
 Breaking down a feature screenplay is a real job that takes a First AD two to
 four days. You read all 110 pages, log every scene's cast, props, vehicles,
