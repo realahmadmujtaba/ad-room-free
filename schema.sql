@@ -24,10 +24,13 @@ CREATE TABLE IF NOT EXISTS scenes
     animals           Array(String),
     minors            Array(String),
     complexity_score  UInt8,               -- 1..10, model-estimated shoot difficulty
-    ingested_at       DateTime DEFAULT now()
+    ingested_at       DateTime DEFAULT now(),
+    batch_id          String DEFAULT ''    -- tags rows from one replace_project() call
 )
 ENGINE = MergeTree
 ORDER BY (project_id, scene_number);
+
+ALTER TABLE scenes ADD COLUMN IF NOT EXISTS batch_id String DEFAULT '';
 
 
 -- Flattened element table. One row per (scene, category, element).
@@ -41,10 +44,15 @@ CREATE TABLE IF NOT EXISTS scene_elements
     int_ext      LowCardinality(String),
     time_of_day  LowCardinality(String),
     set_name     String,
-    page_eighths UInt16
+    page_eighths UInt16,
+    ingested_at  DateTime DEFAULT now(),
+    batch_id     String DEFAULT ''    -- tags rows from one replace_project() call
 )
 ENGINE = MergeTree
 ORDER BY (project_id, category, element);
+
+ALTER TABLE scene_elements ADD COLUMN IF NOT EXISTS ingested_at DateTime DEFAULT now();
+ALTER TABLE scene_elements ADD COLUMN IF NOT EXISTS batch_id String DEFAULT '';
 
 
 -- Registry of ingested screenplays.

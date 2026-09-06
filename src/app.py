@@ -1,5 +1,6 @@
 """Streamlit front end. This is the hosted URL judges will open."""
 import sys
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -36,6 +37,9 @@ def tools_overview():
     return tools.project_overview()
 
 
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+
 with st.sidebar:
     st.title("🎬 The AD Room")
     st.caption("Gemini + ADK + ClickHouse")
@@ -52,6 +56,9 @@ with st.sidebar:
             status.update(label=f"Loaded {stats['scenes']} scenes", state="complete")
         st.cache_data.clear()
         st.session_state.messages = []
+        # New screenplay data means the agent's prior tool-call answers are stale —
+        # start a fresh ADK session so it can't recall the old project from memory.
+        st.session_state.session_id = str(uuid.uuid4())
 
     st.divider()
     overview = load_overview()
@@ -93,7 +100,7 @@ if question:
     with st.chat_message("assistant"):
         with st.spinner("Checking the boards…"):
             try:
-                result = agent.ask(question)
+                result = agent.ask(question, session_id=st.session_state.session_id)
             except Exception as exc:  # noqa: BLE001
                 result = {"answer": f"Something went wrong: `{exc}`", "tools_used": []}
         if result["tools_used"]:

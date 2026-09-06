@@ -279,7 +279,7 @@ def project_overview() -> dict:
         {"pid": config.DEFAULT_PROJECT},
     )
     title = ch.query(
-        "SELECT title FROM projects WHERE project_id = %(pid)s LIMIT 1",
+        "SELECT title FROM projects WHERE project_id = %(pid)s ORDER BY ingested_at DESC LIMIT 1",
         {"pid": config.DEFAULT_PROJECT},
     )
     return {

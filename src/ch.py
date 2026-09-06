@@ -3,6 +3,7 @@
 This is the ClickHouse partner integration. Every agent tool in tools.py reaches
 the database through the functions below — nothing here is decorative.
 """
+import uuid
 from functools import lru_cache
 from typing import Any
 
@@ -32,6 +33,7 @@ SCENE_COLUMNS = [
     "animals",
     "minors",
     "complexity_score",
+    "batch_id",
 ]
 
 ARRAY_FIELDS = {
@@ -81,7 +83,7 @@ def init_schema(path: str = "schema.sql") -> None:
             command(cleaned)
 
 
-def _row_from_scene(project_id: str, scene: dict) -> list:
+def _row_from_scene(project_id: str, scene: dict, batch_id: str) -> list:
     return [
         project_id,
         str(scene.get("scene_number", "")),
@@ -104,16 +106,25 @@ def _row_from_scene(project_id: str, scene: dict) -> list:
         scene.get("animals", []) or [],
         scene.get("minors", []) or [],
         int(scene.get("complexity_score", 1) or 1),
+        batch_id,
     ]
 
 
 def replace_project(project_id: str, title: str, scenes: list[dict]) -> dict:
-    """Wipe and reload one screenplay. Idempotent — safe to re-run during a demo."""
-    c = client()
-    c.command("DELETE FROM scenes WHERE project_id = %(p)s", parameters={"p": project_id})
-    c.command("DELETE FROM scene_elements WHERE project_id = %(p)s", parameters={"p": project_id})
+    """Wipe and reload one screenplay. Idempotent — safe to re-run during a demo.
 
-    scene_rows = [_row_from_scene(project_id, s) for s in scenes]
+    ClickHouse's lightweight DELETE runs as an async mutation. Issuing it before
+    the INSERT (delete-then-insert) races: the mutation can still be mid-flight
+    when the new rows land and sweep them up too, silently leaving the project
+    empty. So the new rows are inserted first, tagged with a fresh batch_id, and
+    only then are old rows deleted by excluding that batch_id — an identity
+    check, not a timestamp comparison, so it can't be fooled by clock skew
+    between ClickHouse Cloud's compute replicas either.
+    """
+    c = client()
+    batch_id = str(uuid.uuid4())
+
+    scene_rows = [_row_from_scene(project_id, s, batch_id) for s in scenes]
     if scene_rows:
         c.insert("scenes", scene_rows, column_names=SCENE_COLUMNS)
 
@@ -131,6 +142,7 @@ def replace_project(project_id: str, title: str, scenes: list[dict]) -> dict:
                         scene.get("time_of_day", "") or "",
                         scene.get("set_name") or scene.get("location", "") or "",
                         int(scene.get("page_eighths", 0) or 0),
+                        batch_id,
                     ]
                 )
     if element_rows:
@@ -146,8 +158,18 @@ def replace_project(project_id: str, title: str, scenes: list[dict]) -> dict:
                 "time_of_day",
                 "set_name",
                 "page_eighths",
+                "batch_id",
             ],
         )
+
+    c.command(
+        "DELETE FROM scenes WHERE project_id = %(p)s AND batch_id != %(batch)s",
+        parameters={"p": project_id, "batch": batch_id},
+    )
+    c.command(
+        "DELETE FROM scene_elements WHERE project_id = %(p)s AND batch_id != %(batch)s",
+        parameters={"p": project_id, "batch": batch_id},
+    )
 
     total_pages = sum(float(s.get("page_eighths", 0) or 0) for s in scenes) / 8.0
     c.insert(
