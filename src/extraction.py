@@ -9,6 +9,7 @@ from google import genai
 from google.genai import types
 
 import config
+import retry
 
 _client = None
 
@@ -103,7 +104,8 @@ Return every scene. Do not summarise or skip.
 
 def extract_screenplay(pdf_bytes: bytes, model: str | None = None) -> dict:
     """Return {"title": str, "scenes": [ ... ]} from a screenplay PDF."""
-    response = client().models.generate_content(
+    response = retry.call_with_retry(
+        client().models.generate_content,
         model=model or config.MODEL_PRO,
         contents=[
             types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),

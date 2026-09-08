@@ -8,6 +8,7 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 import config
+import retry
 import tools
 
 APP_NAME = "script_breakdown"
@@ -53,10 +54,7 @@ async def _ensure_session(user_id: str, session_id: str) -> None:
         )
 
 
-async def ask_async(question: str, user_id: str = "demo", session_id: str = "s1") -> dict:
-    await _ensure_session(user_id, session_id)
-    message = types.Content(role="user", parts=[types.Part(text=question)])
-
+async def _run_once(user_id: str, session_id: str, message: "types.Content") -> dict:
     answer_parts: list[str] = []
     tool_calls: list[str] = []
 
@@ -73,6 +71,12 @@ async def ask_async(question: str, user_id: str = "demo", session_id: str = "s1"
             )
 
     return {"answer": "\n".join(answer_parts).strip(), "tools_used": tool_calls}
+
+
+async def ask_async(question: str, user_id: str = "demo", session_id: str = "s1") -> dict:
+    await _ensure_session(user_id, session_id)
+    message = types.Content(role="user", parts=[types.Part(text=question)])
+    return await retry.call_async_with_retry(_run_once, user_id, session_id, message)
 
 
 def ask(question: str, user_id: str = "demo", session_id: str = "s1") -> dict:

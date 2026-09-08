@@ -102,7 +102,15 @@ if question:
             try:
                 result = agent.ask(question, session_id=st.session_state.session_id)
             except Exception as exc:  # noqa: BLE001
-                result = {"answer": f"Something went wrong: `{exc}`", "tools_used": []}
+                if getattr(exc, "code", None) in (429, 503):
+                    answer = (
+                        "Gemini is overloaded right now and stayed down through "
+                        "several automatic retries. This is transient on Google's "
+                        "side — please try asking again in a moment."
+                    )
+                else:
+                    answer = f"Something went wrong: `{exc}`"
+                result = {"answer": answer, "tools_used": []}
         if result["tools_used"]:
             st.caption("🔧 " + " → ".join(result["tools_used"]))
         st.markdown(result["answer"])
