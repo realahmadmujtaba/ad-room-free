@@ -46,19 +46,30 @@ with st.sidebar:
 
     uploaded = st.file_uploader("Upload a screenplay PDF", type="pdf")
     if uploaded and st.button("Break it down", type="primary", use_container_width=True):
-        with st.status("Breaking down the script…", expanded=True) as status:
-            st.write("Reading the PDF with Gemini…")
-            data = extraction.extract_screenplay(uploaded.read())
-            st.write(f"Found {len(data['scenes'])} scenes. Writing to ClickHouse…")
-            stats = ch.replace_project(
-                config.DEFAULT_PROJECT, data.get("title", uploaded.name), data["scenes"]
-            )
-            status.update(label=f"Loaded {stats['scenes']} scenes", state="complete")
-        st.cache_data.clear()
-        st.session_state.messages = []
-        # New screenplay data means the agent's prior tool-call answers are stale —
-        # start a fresh ADK session so it can't recall the old project from memory.
-        st.session_state.session_id = str(uuid.uuid4())
+        try:
+            with st.status("Breaking down the script…", expanded=True) as status:
+                st.write("Reading the PDF with Gemini…")
+                data = extraction.extract_screenplay(uploaded.read())
+                st.write(f"Found {len(data['scenes'])} scenes. Writing to ClickHouse…")
+                stats = ch.replace_project(
+                    config.DEFAULT_PROJECT, data.get("title", uploaded.name), data["scenes"]
+                )
+                status.update(label=f"Loaded {stats['scenes']} scenes", state="complete")
+        except Exception as exc:  # noqa: BLE001
+            if getattr(exc, "code", None) in (429, 503):
+                st.error(
+                    "Gemini is overloaded right now and stayed down through several "
+                    "automatic retries. This is transient on Google's side — wait a "
+                    "moment and click **Break it down** again."
+                )
+            else:
+                st.error(f"Couldn't break down the script: `{exc}`")
+        else:
+            st.cache_data.clear()
+            st.session_state.messages = []
+            # New screenplay data means the agent's prior tool-call answers are stale —
+            # start a fresh ADK session so it can't recall the old project from memory.
+            st.session_state.session_id = str(uuid.uuid4())
 
     st.divider()
     overview = load_overview()
