@@ -5,4 +5,4 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
-test_screenplay2.pdf
+test_screenplay*.pdf

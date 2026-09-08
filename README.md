@@ -88,6 +88,11 @@ streamlit run streamlit_app.py
 creates the ClickHouse schema, seeds a demo screenplay, and asks the agent a
 live question.
 
+Want to see the PDF upload path itself, not just the pre-seeded data? Upload
+[`night_work.pdf`](night_work.pdf) from the repo root through the sidebar —
+it's the same original 35-scene screenplay the demo project is seeded from,
+run for real through Gemini's extraction.
+
 Check the agent from the CLI without the UI:
 
 ```bash
