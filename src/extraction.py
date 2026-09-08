@@ -104,9 +104,14 @@ Return every scene. Do not summarise or skip.
 
 def extract_screenplay(pdf_bytes: bytes, model: str | None = None) -> dict:
     """Return {"title": str, "scenes": [ ... ]} from a screenplay PDF."""
-    response = retry.call_with_retry(
+    primary = model or config.MODEL_PRO
+    models = [primary]
+    if config.MODEL_FALLBACK and config.MODEL_FALLBACK != primary:
+        models.append(config.MODEL_FALLBACK)
+
+    response = retry.call_with_model_fallback(
         client().models.generate_content,
-        model=model or config.MODEL_PRO,
+        models,
         contents=[
             types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
             types.Part.from_text(text=PROMPT),

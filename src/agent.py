@@ -5,6 +5,7 @@ import asyncio
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
+from google.genai import errors as genai_errors
 from google.genai import types
 
 import config
@@ -32,16 +33,31 @@ How to work:
   even if you weren't asked.
 """
 
-root_agent = Agent(
-    name="ad_room",
-    model=config.MODEL_PRO,
-    description="Answers scheduling, breakdown and production-risk questions about a screenplay.",
-    instruction=INSTRUCTION,
-    tools=tools.ALL_TOOLS,
-)
+def _make_agent(model: str) -> Agent:
+    return Agent(
+        name="ad_room",
+        model=model,
+        description="Answers scheduling, breakdown and production-risk questions about a screenplay.",
+        instruction=INSTRUCTION,
+        tools=tools.ALL_TOOLS,
+    )
+
+
+root_agent = _make_agent(config.MODEL_PRO)
 
 _session_service = InMemorySessionService()
 _runner = Runner(agent=root_agent, app_name=APP_NAME, session_service=_session_service)
+
+# Only used when MODEL_PRO exhausts its own retries on a 429/503 — a lighter
+# model on a different capacity pool that often stays up when the primary is
+# overloaded. Shares the same session service/id so it can pick up mid-chat.
+_fallback_runner = None
+if config.MODEL_FALLBACK and config.MODEL_FALLBACK != config.MODEL_PRO:
+    _fallback_runner = Runner(
+        agent=_make_agent(config.MODEL_FALLBACK),
+        app_name=APP_NAME,
+        session_service=_session_service,
+    )
 
 
 async def _ensure_session(user_id: str, session_id: str) -> None:
@@ -54,11 +70,11 @@ async def _ensure_session(user_id: str, session_id: str) -> None:
         )
 
 
-async def _run_once(user_id: str, session_id: str, message: "types.Content") -> dict:
+async def _run_once(runner: Runner, user_id: str, session_id: str, message: "types.Content") -> dict:
     answer_parts: list[str] = []
     tool_calls: list[str] = []
 
-    async for event in _runner.run_async(
+    async for event in runner.run_async(
         user_id=user_id, session_id=session_id, new_message=message
     ):
         if event.content and event.content.parts:
@@ -76,7 +92,14 @@ async def _run_once(user_id: str, session_id: str, message: "types.Content") -> 
 async def ask_async(question: str, user_id: str = "demo", session_id: str = "s1") -> dict:
     await _ensure_session(user_id, session_id)
     message = types.Content(role="user", parts=[types.Part(text=question)])
-    return await retry.call_async_with_retry(_run_once, user_id, session_id, message)
+    try:
+        return await retry.call_async_with_retry(_run_once, _runner, user_id, session_id, message)
+    except genai_errors.APIError as exc:
+        if _fallback_runner is not None and retry.is_retryable(exc):
+            return await retry.call_async_with_retry(
+                _run_once, _fallback_runner, user_id, session_id, message
+            )
+        raise
 
 
 def ask(question: str, user_id: str = "demo", session_id: str = "s1") -> dict:

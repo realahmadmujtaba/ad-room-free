@@ -15,7 +15,7 @@ ATTEMPTS = 4
 BASE_DELAY = 2.0
 
 
-def _is_retryable(exc: BaseException) -> bool:
+def is_retryable(exc: BaseException) -> bool:
     return getattr(exc, "code", None) in RETRYABLE_CODES
 
 
@@ -31,9 +31,25 @@ def call_with_retry(fn, *args, **kwargs):
             return fn(*args, **kwargs)
         except genai_errors.APIError as exc:
             last_exc = exc
-            if not _is_retryable(exc) or attempt == ATTEMPTS - 1:
+            if not is_retryable(exc) or attempt == ATTEMPTS - 1:
                 raise
             time.sleep(_delay(attempt))
+    raise last_exc
+
+
+def call_with_model_fallback(fn, models, *, model_kwarg="model", **kwargs):
+    """Call fn(**{model_kwarg: model}, **kwargs) for the first model in
+    `models`, retrying transient overload; if that model's retries are fully
+    exhausted, fall through to the next model in the list instead of failing.
+    """
+    last_exc = None
+    for i, model in enumerate(models):
+        try:
+            return call_with_retry(fn, **{model_kwarg: model}, **kwargs)
+        except genai_errors.APIError as exc:
+            last_exc = exc
+            if not is_retryable(exc) or i == len(models) - 1:
+                raise
     raise last_exc
 
 

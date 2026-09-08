@@ -36,6 +36,10 @@ def get(name: str, default: str = "") -> str:
 GOOGLE_API_KEY = get("GOOGLE_API_KEY")
 MODEL_PRO = get("GEMINI_MODEL_PRO", "gemini-2.5-flash")
 MODEL_FLASH = get("GEMINI_MODEL_FLASH", "gemini-2.5-flash")
+# Used only when MODEL_PRO exhausts its retries on a 429/503 — a cheaper, lighter
+# model draws from a different capacity pool, so it often stays up when the
+# primary model is overloaded. See src/retry.py.
+MODEL_FALLBACK = get("GEMINI_MODEL_FALLBACK", "gemini-3.5-flash-lite")
 
 # Route the ADK and the genai SDK at the AI Studio endpoint rather than Vertex AI.
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "FALSE"
