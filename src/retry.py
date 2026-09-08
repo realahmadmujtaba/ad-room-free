@@ -61,7 +61,7 @@ async def call_async_with_retry(fn, *args, **kwargs):
             return await fn(*args, **kwargs)
         except genai_errors.APIError as exc:
             last_exc = exc
-            if not _is_retryable(exc) or attempt == ATTEMPTS - 1:
+            if not is_retryable(exc) or attempt == ATTEMPTS - 1:
                 raise
             await asyncio.sleep(_delay(attempt))
     raise last_exc
