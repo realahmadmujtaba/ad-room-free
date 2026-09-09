@@ -4,6 +4,7 @@ This is the ClickHouse partner integration. Every agent tool in tools.py reaches
 the database through the functions below — nothing here is decorative.
 """
 import uuid
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any
 
@@ -172,9 +173,14 @@ def replace_project(project_id: str, title: str, scenes: list[dict]) -> dict:
     )
 
     total_pages = sum(float(s.get("page_eighths", 0) or 0) for s in scenes) / 8.0
+    # ClickHouse dedupes inserts by hashing the client-submitted block. ingested_at
+    # is normally a server-side DEFAULT now() and so isn't part of that hash --
+    # re-ingesting a project with identical (title, scene_count, total_pages), even
+    # long after the original row was deleted, would silently no-op. Passing a real
+    # timestamp explicitly keeps every insert's block content unique.
     c.insert(
         "projects",
-        [[project_id, title, len(scenes), total_pages]],
-        column_names=["project_id", "title", "scene_count", "total_pages"],
+        [[project_id, title, len(scenes), total_pages, datetime.now(timezone.utc)]],
+        column_names=["project_id", "title", "scene_count", "total_pages", "ingested_at"],
     )
     return {"scenes": len(scene_rows), "elements": len(element_rows), "pages": round(total_pages, 1)}
