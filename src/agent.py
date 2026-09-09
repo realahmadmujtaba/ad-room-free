@@ -9,6 +9,7 @@ from google.genai import errors as genai_errors
 from google.genai import types
 
 import config
+import mcp_ch
 import retry
 import tools
 
@@ -31,6 +32,10 @@ How to work:
 - If a tool returns nothing, say so plainly and suggest what would find it instead.
 - When you spot something that will hurt the schedule or the budget, flag it
   even if you weren't asked.
+- The six domain tools above cover almost everything. For a question they
+  genuinely can't answer, use run_sql_via_mcp to write your own read-only SQL
+  against the schema described in its docstring -- it runs through the real
+  ClickHouse MCP server, not a shortcut.
 """
 
 def _make_agent(model: str) -> Agent:
@@ -39,7 +44,7 @@ def _make_agent(model: str) -> Agent:
         model=model,
         description="Answers scheduling, breakdown and production-risk questions about a screenplay.",
         instruction=INSTRUCTION,
-        tools=tools.ALL_TOOLS,
+        tools=tools.ALL_TOOLS + [mcp_ch.run_sql_via_mcp],
     )
 
 

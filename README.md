@@ -22,7 +22,9 @@ flowchart LR
     A[Screenplay PDF] --> B[Gemini 3.6 Flash<br/>native PDF understanding<br/>+ constrained JSON schema]
     B --> C[(ClickHouse Cloud<br/>scenes · scene_elements · projects)]
     D[User question] --> E[ADK Agent<br/>Google Agent Development Kit]
-    E -->|6 tools| C
+    E -->|6 domain tools| C
+    E -->|run_sql_via_mcp| G[official ClickHouse MCP server<br/>mcp-clickhouse, stdio subprocess]
+    G --> C
     C --> E
     E --> F[Streamlit UI<br/>Streamlit Community Cloud]
 ```
@@ -39,10 +41,19 @@ The flattened `scene_elements` table turns "which scenes need this element" into
 one indexed lookup, and `groupArray` / `arrayFlatten` do the shoot-day banking
 in the database instead of in Python. The schedule builder is a single GROUP BY.
 
+**Two ways in to ClickHouse.** The six domain tools below query ClickHouse
+directly through `clickhouse_connect` (`src/ch.py`) — fast, and purpose-built
+for the agent's core questions. Alongside them, `src/mcp_ch.py` launches the
+**official ClickHouse MCP server** (`mcp-clickhouse`) as a subprocess and talks
+to it over the real MCP protocol, giving the agent a seventh tool
+(`run_sql_via_mcp`) that can write its own ad-hoc SQL against the schema for
+anything the domain tools don't cover. Both paths hit the same ClickHouse Cloud
+service.
+
 ## Agent tools
 
-Each tool is a Python function wrapping a real ClickHouse query. Gemini decides
-which to call and chains them.
+Each domain tool is a Python function wrapping a real ClickHouse query. Gemini
+decides which to call and chains them.
 
 | Tool | What it does |
 |---|---|
@@ -52,14 +63,16 @@ which to call and chains them.
 | `day_out_of_days` | Per-actor scene count, pages, sets and night work — the DOOD report |
 | `build_shooting_schedule` | Banks scenes by set + time of day, packs them into shoot days |
 | `flag_production_risks` | Night exteriors, stunts, VFX, animals, minors, high-complexity scenes |
+| `run_sql_via_mcp` | Ad-hoc read-only SQL via the official ClickHouse MCP server, for anything above doesn't cover |
 
 ## Where the required technologies are actually called
 
 - **Gemini (PDF breakdown)** — `src/extraction.py`, `extract_screenplay()`
 - **Google Agent Development Kit (the agent itself)** — `src/agent.py`, `Agent(...)` and `Runner.run_async()`
-- **ClickHouse client** — `src/ch.py`, `clickhouse_connect.get_client()`
-- **ClickHouse queries powering every tool** — `src/tools.py`, all six functions
+- **ClickHouse client (direct)** — `src/ch.py`, `clickhouse_connect.get_client()`
+- **ClickHouse queries powering the six domain tools** — `src/tools.py`
 - **ClickHouse writes** — `src/ch.py`, `replace_project()`
+- **Official ClickHouse MCP server (`mcp-clickhouse`)** — `src/mcp_ch.py`, `run_sql_via_mcp()` launches it as a subprocess and calls its `run_query` tool over the MCP protocol
 
 ## Setup
 
