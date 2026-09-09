@@ -6,3 +6,5 @@ __pycache__/
 venv/
 .DS_Store
 test_screenplay*.pdf
+PROJECT_EXPLAINED.md
+thumbnail.png
